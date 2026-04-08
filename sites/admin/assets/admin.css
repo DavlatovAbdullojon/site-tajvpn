@@ -102,6 +102,12 @@ input {
   font: inherit;
 }
 
+.date-input {
+  min-width: 190px;
+  min-height: 44px;
+  padding: 0 12px;
+}
+
 .action {
   border: 0;
   border-radius: 16px;

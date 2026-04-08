@@ -110,6 +110,29 @@ def restore_after_unban(db: Session, device: UserDevice) -> Subscription:
     return subscription
 
 
+def set_manual_subscription_end(db: Session, device: UserDevice, *, ends_at) -> Subscription:
+    subscription = ensure_subscription(db, device)
+    subscription.starts_at = ensure_utc(subscription.starts_at)
+    subscription.ends_at = ensure_utc(ends_at)
+
+    now = utcnow()
+    if subscription.starts_at is None and subscription.ends_at and subscription.ends_at > now:
+        subscription.starts_at = now
+
+    if subscription.access_status == AccessStatus.BANNED:
+        db.flush()
+        return subscription
+
+    if subscription.ends_at and subscription.ends_at > now:
+        subscription.access_status = AccessStatus.ACTIVE
+    else:
+        subscription.access_status = AccessStatus.INACTIVE
+        subscription.tariff_plan_id = None
+
+    db.flush()
+    return subscription
+
+
 def subscription_message(subscription: Subscription) -> str:
     if (
         subscription.access_status == AccessStatus.ACTIVE

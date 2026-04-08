@@ -144,3 +144,7 @@ class AdminActionResponse(ApiModel):
     message: str
     device_id: str = Field(..., alias="deviceId")
     access_status: AccessStatus = Field(..., alias="accessStatus")
+
+
+class AdminSubscriptionUpdateRequest(ApiModel):
+    expires_at: datetime = Field(..., alias="expiresAt")

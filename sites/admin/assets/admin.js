@@ -19,7 +19,7 @@ saveTokenButton.addEventListener('click', () => {
   }
 
   localStorage.setItem(tokenKey, token);
-  loginStatus.textContent = 'Токен сохранен локально. Загружаем данные...';
+  loginStatus.textContent = 'Токен сохранён локально. Загружаем данные...';
   loadDashboard();
 });
 
@@ -68,7 +68,7 @@ async function fetchJson(path, token, options = {}) {
       const data = await response.json();
       detail = data.detail || detail;
     } catch (_) {
-      // ignore JSON parsing error
+      // ignore
     }
     throw new Error(detail);
   }
@@ -109,7 +109,7 @@ function renderPayments(payments) {
 
 function renderDevices(devices) {
   if (!devices.length) {
-    devicesBody.innerHTML = '<tr><td colspan="6">Устройств пока нет.</td></tr>';
+    devicesBody.innerHTML = '<tr><td colspan="7">Устройств пока нет.</td></tr>';
     return;
   }
 
@@ -124,7 +124,23 @@ function renderDevices(devices) {
           <td>${escapeHtml(device.activePlanTitle || '—')}</td>
           <td>${formatDate(device.subscriptionEndsAt)}</td>
           <td>
+            <input
+              class="date-input"
+              type="datetime-local"
+              value="${toDateTimeLocalValue(device.subscriptionEndsAt)}"
+              data-expire-device-id="${escapeHtml(device.deviceId)}"
+            />
+          </td>
+          <td>
             <div class="device-actions">
+              <button
+                class="action action--primary"
+                type="button"
+                data-device-id="${escapeHtml(device.deviceId)}"
+                data-action="set-date"
+              >
+                Сохранить дату
+              </button>
               <button
                 class="action ${isBanned ? 'action--safe' : 'action--danger'}"
                 type="button"
@@ -156,10 +172,24 @@ async function onDeviceAction(event) {
 
   button.disabled = true;
   try {
-    await fetchJson(`/admin/devices/${encodeURIComponent(deviceId)}/${action}`, token, {
-      method: 'POST',
-      body: '{}',
-    });
+    if (action === 'set-date') {
+      const input = devicesBody.querySelector(`[data-expire-device-id="${cssEscape(deviceId)}"]`);
+      const value = input?.value?.trim();
+      if (!value) {
+        throw new Error('Выберите дату окончания подписки.');
+      }
+
+      await fetchJson(`/admin/devices/${encodeURIComponent(deviceId)}/subscription`, token, {
+        method: 'POST',
+        body: JSON.stringify({ expiresAt: new Date(value).toISOString() }),
+      });
+    } else {
+      await fetchJson(`/admin/devices/${encodeURIComponent(deviceId)}/${action}`, token, {
+        method: 'POST',
+        body: '{}',
+      });
+    }
+
     await loadDashboard();
   } catch (error) {
     loginStatus.textContent = error.message || 'Не удалось выполнить действие.';
@@ -196,6 +226,24 @@ function formatDate(value) {
   return date.toLocaleString('ru-RU');
 }
 
+function toDateTimeLocalValue(value) {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 function number(value) {
   return Number(value || 0).toLocaleString('ru-RU');
 }
@@ -207,6 +255,13 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function cssEscape(value) {
+  if (window.CSS && typeof window.CSS.escape === 'function') {
+    return window.CSS.escape(value);
+  }
+  return String(value).replace(/["\\]/g, '\\$&');
 }
 
 if (tokenInput.value.trim()) {

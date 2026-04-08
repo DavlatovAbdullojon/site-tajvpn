@@ -5,8 +5,15 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
 from models import AccessStatus, Payment, PaymentStatus, Subscription, UserDevice, ensure_utc, utcnow
-from schemas import AdminActionResponse, AdminDeviceResponse, AdminOverviewResponse, AdminPaymentResponse, AdminStatsResponse
-from services.subscription_service import ban_user, refresh_subscription, restore_after_unban
+from schemas import (
+    AdminActionResponse,
+    AdminDeviceResponse,
+    AdminOverviewResponse,
+    AdminPaymentResponse,
+    AdminStatsResponse,
+    AdminSubscriptionUpdateRequest,
+)
+from services.subscription_service import ban_user, refresh_subscription, restore_after_unban, set_manual_subscription_end
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -26,29 +33,15 @@ def require_admin_token(x_admin_token: str | None = Header(default=None, alias="
 def get_admin_overview(db: Session = Depends(get_db)) -> AdminOverviewResponse:
     now = utcnow()
     total_devices = db.scalar(select(func.count()).select_from(UserDevice)) or 0
-    active_rows = db.scalars(
-        select(Subscription).where(Subscription.access_status == AccessStatus.ACTIVE)
-    ).all()
+    active_rows = db.scalars(select(Subscription).where(Subscription.access_status == AccessStatus.ACTIVE)).all()
     active_subscriptions = sum(1 for item in active_rows if ensure_utc(item.ends_at) and ensure_utc(item.ends_at) > now)
-    pending_payments = db.scalar(
-        select(func.count()).select_from(Payment).where(Payment.status == PaymentStatus.PENDING)
-    ) or 0
-    paid_payments = db.scalar(
-        select(func.count()).select_from(Payment).where(Payment.status == PaymentStatus.PAID)
-    ) or 0
-    failed_payments = db.scalar(
-        select(func.count()).select_from(Payment).where(Payment.status == PaymentStatus.FAILED)
-    ) or 0
-    revenue_rub = db.scalar(
-        select(func.coalesce(func.sum(Payment.amount_rub), 0)).where(Payment.status == PaymentStatus.PAID)
-    ) or 0
+    pending_payments = db.scalar(select(func.count()).select_from(Payment).where(Payment.status == PaymentStatus.PENDING)) or 0
+    paid_payments = db.scalar(select(func.count()).select_from(Payment).where(Payment.status == PaymentStatus.PAID)) or 0
+    failed_payments = db.scalar(select(func.count()).select_from(Payment).where(Payment.status == PaymentStatus.FAILED)) or 0
+    revenue_rub = db.scalar(select(func.coalesce(func.sum(Payment.amount_rub), 0)).where(Payment.status == PaymentStatus.PAID)) or 0
 
-    recent_payments = db.scalars(
-        select(Payment).order_by(Payment.created_at.desc(), Payment.id.desc()).limit(10)
-    ).all()
-    devices = db.scalars(
-        select(UserDevice).order_by(UserDevice.last_seen_at.desc(), UserDevice.id.desc()).limit(20)
-    ).all()
+    recent_payments = db.scalars(select(Payment).order_by(Payment.created_at.desc(), Payment.id.desc()).limit(10)).all()
+    devices = db.scalars(select(UserDevice).order_by(UserDevice.last_seen_at.desc(), UserDevice.id.desc()).limit(20)).all()
 
     overview = AdminOverviewResponse(
         stats=AdminStatsResponse(
@@ -82,10 +75,7 @@ def list_devices(db: Session = Depends(get_db)) -> list[AdminDeviceResponse]:
 
 @router.post("/devices/{device_id}/ban", response_model=AdminActionResponse, dependencies=[Depends(require_admin_token)])
 def ban_device(device_id: str, db: Session = Depends(get_db)) -> AdminActionResponse:
-    device = db.scalar(select(UserDevice).where(UserDevice.device_id == device_id))
-    if device is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Устройство не найдено.")
-
+    device = _get_device_or_404(db, device_id)
     subscription = ban_user(db, device)
     db.commit()
     db.refresh(subscription)
@@ -99,10 +89,7 @@ def ban_device(device_id: str, db: Session = Depends(get_db)) -> AdminActionResp
 
 @router.post("/devices/{device_id}/unban", response_model=AdminActionResponse, dependencies=[Depends(require_admin_token)])
 def unban_device(device_id: str, db: Session = Depends(get_db)) -> AdminActionResponse:
-    device = db.scalar(select(UserDevice).where(UserDevice.device_id == device_id))
-    if device is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Устройство не найдено.")
-
+    device = _get_device_or_404(db, device_id)
     subscription = restore_after_unban(db, device)
     db.commit()
     db.refresh(subscription)
@@ -112,6 +99,31 @@ def unban_device(device_id: str, db: Session = Depends(get_db)) -> AdminActionRe
         deviceId=device.device_id,
         accessStatus=subscription.access_status,
     )
+
+
+@router.post("/devices/{device_id}/subscription", response_model=AdminActionResponse, dependencies=[Depends(require_admin_token)])
+def update_device_subscription(
+    device_id: str,
+    payload: AdminSubscriptionUpdateRequest,
+    db: Session = Depends(get_db),
+) -> AdminActionResponse:
+    device = _get_device_or_404(db, device_id)
+    subscription = set_manual_subscription_end(db, device, ends_at=payload.expires_at)
+    db.commit()
+    db.refresh(subscription)
+
+    return AdminActionResponse(
+        message="Дата окончания подписки обновлена.",
+        deviceId=device.device_id,
+        accessStatus=subscription.access_status,
+    )
+
+
+def _get_device_or_404(db: Session, device_id: str) -> UserDevice:
+    device = db.scalar(select(UserDevice).where(UserDevice.device_id == device_id))
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Устройство не найдено.")
+    return device
 
 
 def _serialize_payment(payment: Payment) -> AdminPaymentResponse:
