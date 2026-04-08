@@ -3,6 +3,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from config import settings
 from models import AccessStatus, Payment, PaymentStatus, Subscription, UserDevice, ensure_utc, utcnow
 
 
@@ -59,6 +60,29 @@ def activate_subscription(db: Session, payment: Payment) -> Subscription:
     return subscription
 
 
+def activate_free_trial(db: Session, device: UserDevice, *, duration_days: int | None = None) -> Subscription:
+    subscription = ensure_subscription(db, device)
+    subscription.starts_at = ensure_utc(subscription.starts_at)
+    subscription.ends_at = ensure_utc(subscription.ends_at)
+
+    if subscription.access_status == AccessStatus.BANNED:
+        return subscription
+    if subscription.last_payment_id is not None:
+        return subscription
+
+    now = utcnow()
+    if subscription.access_status == AccessStatus.ACTIVE and subscription.ends_at and subscription.ends_at > now:
+        return subscription
+
+    trial_days = duration_days or settings.free_trial_days
+    subscription.access_status = AccessStatus.ACTIVE
+    subscription.starts_at = now
+    subscription.ends_at = now + timedelta(days=trial_days)
+    subscription.tariff_plan_id = None
+    db.flush()
+    return subscription
+
+
 def ban_user(db: Session, device: UserDevice) -> Subscription:
     subscription = ensure_subscription(db, device)
     subscription.access_status = AccessStatus.BANNED
@@ -87,6 +111,13 @@ def restore_after_unban(db: Session, device: UserDevice) -> Subscription:
 
 
 def subscription_message(subscription: Subscription) -> str:
+    if (
+        subscription.access_status == AccessStatus.ACTIVE
+        and subscription.last_payment_id is None
+        and subscription.ends_at is not None
+    ):
+        return f"Бесплатный период активен. У вас есть {settings.free_trial_days} дней бесплатного доступа к VPN."
+
     messages = {
         AccessStatus.INACTIVE: "Подписка не активна. Выберите тариф и оплатите через ENOT.",
         AccessStatus.ACTIVE: "Подписка активна. Доступ к VPN открыт.",

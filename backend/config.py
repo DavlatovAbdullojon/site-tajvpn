@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     allowed_origins: str = "https://tajvpn.com,https://admin.tajvpn.com,http://localhost:3000,http://localhost:5173"
 
     admin_token: str = ""
+    free_trial_days: int = 15
 
     enot_api_base: str = "https://api.enot.io"
     enot_shop_id: str = ""
