@@ -2,21 +2,20 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
+from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from config import settings
-from models import AccessStatus, Payment, PaymentStatus, TariffPlan, ensure_utc, utcnow
+from models import AccessStatus, Payment, PaymentStatus, Subscription, TariffPlan, ensure_utc, utcnow
 from schemas import PaymentOrderResponse, PaymentStatusResponse
 from services.device_service import get_or_create_device
-from services.enot_service import create_invoice, get_invoice_info, normalize_provider_status, parse_provider_datetime
-from services.subscription_service import activate_subscription, refresh_subscription
+from services.subscription_service import refresh_subscription
 
 
-FINAL_PROVIDER_FAILURE_STATUSES = {"fail", "failed", "expired", "refund", "canceled", "cancelled"}
+TELEGRAM_ADMIN_USERNAME = "tajvpn_admin"
 
 
 def create_payment_order(db: Session, *, device_id: str, plan_id: str) -> Payment:
@@ -27,29 +26,34 @@ def create_payment_order(db: Session, *, device_id: str, plan_id: str) -> Paymen
 
     plan = _get_plan(db, plan_id)
     payment_id = f"pay_{uuid4().hex}"
-    provider_response = create_invoice(
+    created_at = utcnow()
+    expires_at = created_at + timedelta(days=7)
+    telegram_url = _build_telegram_chat_url(
         payment_id=payment_id,
-        amount_rub=plan.amount_rub,
         device_id=device.device_id,
-        plan_code=plan.code,
-        plan_title=plan.title,
+        plan=plan,
     )
-    provider_data = provider_response.get("data") or {}
-    expires_at = parse_provider_datetime(provider_data.get("expired")) or parse_provider_datetime(provider_data.get("expired_at"))
-    if expires_at is None:
-        expires_at = utcnow() + timedelta(minutes=settings.enot_expire_minutes)
 
     payment = Payment(
         payment_id=payment_id,
         user_device_id=device.id,
         tariff_plan_id=plan.id,
         amount_rub=plan.amount_rub,
-        currency=settings.enot_currency,
+        currency="RUB",
         status=PaymentStatus.PENDING,
-        provider_status="created",
-        enot_invoice_id=_safe_str(provider_data.get("id")),
-        enot_payment_url=provider_data.get("url"),
-        raw_create_response_json=json.dumps(provider_response, ensure_ascii=False),
+        provider="telegram_manual",
+        provider_status="waiting_for_receipt",
+        enot_payment_url=telegram_url,
+        raw_create_response_json=json.dumps(
+            {
+                "provider": "telegram_manual",
+                "telegramUrl": telegram_url,
+                "deviceId": device.device_id,
+                "planCode": plan.code,
+                "planTitle": plan.title,
+            },
+            ensure_ascii=False,
+        ),
         expires_at=expires_at,
     )
     db.add(payment)
@@ -60,7 +64,7 @@ def create_payment_order(db: Session, *, device_id: str, plan_id: str) -> Paymen
 def get_payment(db: Session, payment_id: str) -> Payment:
     payment = db.scalar(select(Payment).where(Payment.payment_id == payment_id))
     if payment is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Платеж не найден.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Платёж не найден.")
     return payment
 
 
@@ -69,67 +73,52 @@ def refresh_payment_status(db: Session, payment: Payment) -> Payment:
     payment.expires_at = ensure_utc(payment.expires_at)
     payment.paid_at = ensure_utc(payment.paid_at)
 
-    if payment.status == PaymentStatus.PAID:
-        refresh_subscription(db, payment.user_device)
-        return payment
-    if payment.status == PaymentStatus.FAILED:
-        refresh_subscription(db, payment.user_device)
-        return payment
-
-    if payment.expires_at and payment.expires_at <= utcnow() and payment.status == PaymentStatus.PENDING:
-        payment.status = PaymentStatus.FAILED
-        payment.provider_status = payment.provider_status or "expired"
-        payment.failure_reason = "Срок действия счета истек до подтверждения оплаты."
-        db.flush()
-        return payment
-
-    if settings.has_enot_credentials:
-        provider_response = get_invoice_info(order_id=payment.payment_id, invoice_id=payment.enot_invoice_id)
-        sync_payment_from_provider(db, payment, provider_response, persist_to_webhook_log=False)
-
-    refresh_subscription(db, payment.user_device)
     db.flush()
     return payment
 
 
-def sync_payment_from_provider(db: Session, payment: Payment, provider_response: dict, *, persist_to_webhook_log: bool) -> Payment:
-    data = provider_response.get("data") if isinstance(provider_response.get("data"), dict) else provider_response
-    provider_status = normalize_provider_status(data.get("status") or provider_response.get("status"))
-    if not provider_status and payment.provider_status:
-        provider_status = normalize_provider_status(payment.provider_status)
-
+def sync_payment_from_provider(
+    db: Session,
+    payment: Payment,
+    provider_response: dict,
+    *,
+    persist_to_webhook_log: bool,
+) -> Payment:
     if persist_to_webhook_log:
         payment.raw_webhook_json = json.dumps(provider_response, ensure_ascii=False)
+    db.flush()
+    return payment
 
-    invoice_id = _safe_str(data.get("invoice_id")) or _safe_str(data.get("id"))
-    if invoice_id:
-        payment.enot_invoice_id = invoice_id
-    payment.enot_payment_url = data.get("url") or payment.enot_payment_url
-    payment.provider_status = provider_status or payment.provider_status
-    payment.expires_at = (
-        parse_provider_datetime(data.get("expired_at"))
-        or parse_provider_datetime(data.get("expired"))
-        or ensure_utc(payment.expires_at)
+
+def confirm_latest_pending_payment(
+    db: Session,
+    *,
+    device_id: int,
+    tariff_plan_id: int | None = None,
+) -> Payment | None:
+    statement = (
+        select(Payment)
+        .where(Payment.user_device_id == device_id, Payment.status == PaymentStatus.PENDING)
+        .order_by(Payment.created_at.desc(), Payment.id.desc())
     )
+    if tariff_plan_id is not None:
+        statement = statement.where(Payment.tariff_plan_id == tariff_plan_id)
 
-    if provider_status == "success":
-        payment.status = PaymentStatus.PAID
-        payment.paid_at = parse_provider_datetime(data.get("paid_at")) or parse_provider_datetime(data.get("pay_time")) or utcnow()
-        payment.failure_reason = None
-        activate_subscription(db, payment)
-    elif provider_status in FINAL_PROVIDER_FAILURE_STATUSES:
-        payment.status = PaymentStatus.FAILED
-        payment.failure_reason = _build_failure_reason(provider_status)
-    elif payment.status != PaymentStatus.FAILED:
-        payment.status = PaymentStatus.PENDING
+    payment = db.scalar(statement.limit(1))
+    if payment is None:
+        return None
 
+    payment.status = PaymentStatus.PAID
+    payment.provider_status = "manually_confirmed"
+    payment.paid_at = utcnow()
+    payment.failure_reason = None
     db.flush()
     return payment
 
 
 def build_payment_order_response(payment: Payment) -> PaymentOrderResponse:
     created_at = ensure_utc(payment.created_at) or utcnow()
-    expires_at = ensure_utc(payment.expires_at) or (created_at + timedelta(minutes=settings.enot_expire_minutes))
+    expires_at = ensure_utc(payment.expires_at) or (created_at + timedelta(days=7))
     return PaymentOrderResponse(
         paymentId=payment.payment_id,
         deviceId=payment.user_device.device_id,
@@ -138,7 +127,7 @@ def build_payment_order_response(payment: Payment) -> PaymentOrderResponse:
         createdAt=created_at,
         expiresAt=expires_at,
         paymentUrl=payment.enot_payment_url,
-        providerInvoiceId=payment.enot_invoice_id,
+        providerInvoiceId=None,
         qrCodeUrl=None,
         qrPayload=None,
     )
@@ -146,7 +135,7 @@ def build_payment_order_response(payment: Payment) -> PaymentOrderResponse:
 
 def build_payment_status_response(db: Session, payment: Payment) -> PaymentStatusResponse:
     subscription = refresh_subscription(db, payment.user_device)
-    state, title, detail = _resolve_payment_state(payment)
+    state, title, detail = _resolve_payment_state(payment, subscription)
     return PaymentStatusResponse(
         paymentId=payment.payment_id,
         state=state,
@@ -166,47 +155,35 @@ def _get_plan(db: Session, plan_id: str) -> TariffPlan:
     return plan
 
 
-def _build_failure_reason(provider_status: str) -> str:
-    if provider_status == "expired":
-        return "Срок действия счета истек."
-    if provider_status in {"canceled", "cancelled"}:
-        return "Платеж был отменен."
-    if provider_status == "refund":
-        return "Платеж был возвращен."
-    return "Платеж не был подтвержден."
+def _build_telegram_chat_url(*, payment_id: str, device_id: str, plan: TariffPlan) -> str:
+    message = (
+        "Здравствуйте! Хочу оплатить VPN.\n"
+        f"Платёж: {payment_id}\n"
+        f"Device ID: {device_id}\n"
+        f"Тариф: {plan.title}\n"
+        f"Сумма: {plan.amount_rub} RUB\n"
+        "После оплаты отправлю чек сюда."
+    )
+    return f"https://t.me/{TELEGRAM_ADMIN_USERNAME}?text={quote(message)}"
 
 
-def _resolve_payment_state(payment: Payment) -> tuple[str, str, str]:
+def _resolve_payment_state(payment: Payment, subscription: Subscription) -> tuple[str, str, str]:
     if payment.status == PaymentStatus.PAID:
         return (
             "succeeded",
-            "Подписка активирована",
-            "ENOT подтвердил оплату, доступ к VPN уже открыт на этом устройстве.",
+            "Доступ выдан",
+            "Администратор подтвердил оплату и открыл доступ к VPN на этом устройстве.",
         )
 
     if payment.status == PaymentStatus.FAILED:
-        provider_status = normalize_provider_status(payment.provider_status)
-        if provider_status in {"expired", "canceled", "cancelled"}:
-            return (
-                "cancelled",
-                "Платеж отменен",
-                payment.failure_reason or "Счет больше не активен.",
-            )
         return (
             "failed",
-            "Оплата не прошла",
-            payment.failure_reason or "ENOT не подтвердил этот платеж.",
+            "Заявка отклонена",
+            payment.failure_reason or "Платёж не был подтверждён администратором.",
         )
 
     return (
         "pending",
-        "Ожидаем оплату",
-        "Завершите оплату на странице ENOT, после этого статус обновится автоматически.",
+        "Ожидает ручной проверки",
+        "Откройте чат с @tajvpn_admin, оплатите, отправьте чек и дождитесь, пока администратор выдаст доступ в панели.",
     )
-
-
-def _safe_str(value: object) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None

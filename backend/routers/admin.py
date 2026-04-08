@@ -13,7 +13,14 @@ from schemas import (
     AdminStatsResponse,
     AdminSubscriptionUpdateRequest,
 )
-from services.subscription_service import ban_user, refresh_subscription, restore_after_unban, set_manual_subscription_end
+from services.subscription_service import (
+    ban_user,
+    extend_subscription_by_days,
+    refresh_subscription,
+    restore_after_unban,
+    set_manual_subscription_end,
+)
+from services.payment_service import confirm_latest_pending_payment
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -81,7 +88,7 @@ def ban_device(device_id: str, db: Session = Depends(get_db)) -> AdminActionResp
     db.refresh(subscription)
 
     return AdminActionResponse(
-        message="Устройство заблокировано. Доступ к VPN отключен.",
+        message="Устройство заблокировано. Доступ к VPN отключён.",
         deviceId=device.device_id,
         accessStatus=subscription.access_status,
     )
@@ -109,11 +116,35 @@ def update_device_subscription(
 ) -> AdminActionResponse:
     device = _get_device_or_404(db, device_id)
     subscription = set_manual_subscription_end(db, device, ends_at=payload.expires_at)
+    confirm_latest_pending_payment(
+        db,
+        device_id=device.id,
+        tariff_plan_id=subscription.tariff_plan_id,
+    )
     db.commit()
     db.refresh(subscription)
 
     return AdminActionResponse(
         message="Дата окончания подписки обновлена.",
+        deviceId=device.device_id,
+        accessStatus=subscription.access_status,
+    )
+
+
+@router.post("/devices/{device_id}/extend", response_model=AdminActionResponse, dependencies=[Depends(require_admin_token)])
+def extend_device_subscription(device_id: str, db: Session = Depends(get_db)) -> AdminActionResponse:
+    device = _get_device_or_404(db, device_id)
+    subscription = extend_subscription_by_days(db, device, days=30)
+    confirm_latest_pending_payment(
+        db,
+        device_id=device.id,
+        tariff_plan_id=subscription.tariff_plan_id,
+    )
+    db.commit()
+    db.refresh(subscription)
+
+    return AdminActionResponse(
+        message="Подписка продлена на 30 дней.",
         deviceId=device.device_id,
         accessStatus=subscription.access_status,
     )

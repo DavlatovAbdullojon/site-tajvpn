@@ -80,7 +80,7 @@ function renderStats(stats) {
   statsGrid.innerHTML = `
     <article class="stat-card"><span>Устройства</span><strong>${number(stats.totalDevices)}</strong></article>
     <article class="stat-card"><span>Активные</span><strong>${number(stats.activeSubscriptions)}</strong></article>
-    <article class="stat-card"><span>Pending</span><strong>${number(stats.pendingPayments)}</strong></article>
+    <article class="stat-card"><span>Ожидают оплату</span><strong>${number(stats.pendingPayments)}</strong></article>
     <article class="stat-card"><span>Выручка</span><strong>${number(stats.revenueRub)} ₽</strong></article>
   `;
 }
@@ -142,6 +142,14 @@ function renderDevices(devices) {
                 Сохранить дату
               </button>
               <button
+                class="action action--ghost"
+                type="button"
+                data-device-id="${escapeHtml(device.deviceId)}"
+                data-action="extend"
+              >
+                Продлить +30 дней
+              </button>
+              <button
                 class="action ${isBanned ? 'action--safe' : 'action--danger'}"
                 type="button"
                 data-device-id="${escapeHtml(device.deviceId)}"
@@ -182,6 +190,11 @@ async function onDeviceAction(event) {
       await fetchJson(`/admin/devices/${encodeURIComponent(deviceId)}/subscription`, token, {
         method: 'POST',
         body: JSON.stringify({ expiresAt: new Date(value).toISOString() }),
+      });
+    } else if (action === 'extend') {
+      await fetchJson(`/admin/devices/${encodeURIComponent(deviceId)}/extend`, token, {
+        method: 'POST',
+        body: '{}',
       });
     } else {
       await fetchJson(`/admin/devices/${encodeURIComponent(deviceId)}/${action}`, token, {

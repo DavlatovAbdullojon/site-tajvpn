@@ -133,16 +133,38 @@ def set_manual_subscription_end(db: Session, device: UserDevice, *, ends_at) -> 
     return subscription
 
 
+def extend_subscription_by_days(db: Session, device: UserDevice, *, days: int = 30) -> Subscription:
+    subscription = ensure_subscription(db, device)
+    subscription.starts_at = ensure_utc(subscription.starts_at)
+    subscription.ends_at = ensure_utc(subscription.ends_at)
+
+    now = utcnow()
+    extension_start = subscription.ends_at if subscription.ends_at and subscription.ends_at > now else now
+
+    if subscription.starts_at is None:
+        subscription.starts_at = now
+
+    subscription.ends_at = extension_start + timedelta(days=days)
+
+    if subscription.access_status != AccessStatus.BANNED:
+        subscription.access_status = AccessStatus.ACTIVE
+
+    db.flush()
+    return subscription
+
+
 def subscription_message(subscription: Subscription) -> str:
     if (
         subscription.access_status == AccessStatus.ACTIVE
         and subscription.last_payment_id is None
+        and subscription.starts_at is not None
         and subscription.ends_at is not None
+        and (subscription.ends_at - subscription.starts_at) <= timedelta(days=settings.free_trial_days, minutes=1)
     ):
         return f"Бесплатный период активен. У вас есть {settings.free_trial_days} дней бесплатного доступа к VPN."
 
     messages = {
-        AccessStatus.INACTIVE: "Подписка не активна. Выберите тариф и оплатите через ENOT.",
+        AccessStatus.INACTIVE: "Подписка не активна. Откройте оплату, напишите администратору в Telegram и отправьте чек.",
         AccessStatus.ACTIVE: "Подписка активна. Доступ к VPN открыт.",
         AccessStatus.BANNED: "Устройство заблокировано. Доступ к VPN закрыт.",
     }
