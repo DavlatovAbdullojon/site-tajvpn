@@ -6,47 +6,135 @@
     <title>TAJ VPN</title>
     <meta
       name="description"
-      content="TAJ VPN: быстрый VPN-сервис с автоматической оплатой через ENOT и отдельной админ-панелью."
+      content="TAJ VPN: красивый и быстрый VPN с оплатой через ENOT, API на api.tajvpn.com и админкой на admin.tajvpn.com."
     />
-    <link rel="stylesheet" href="/assets/site.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/site.css" />
   </head>
   <body>
+    <div class="noise"></div>
     <div class="site-shell">
-      <header class="hero">
-        <div class="hero__copy">
-          <p class="eyebrow">TAJ VPN</p>
-          <h1>Три домена. Один сервис. Готово к хостингу.</h1>
-          <p class="hero__lead">
-            Публичный сайт живёт на <strong>tajvpn.com</strong>, API на
-            <strong>api.tajvpn.com</strong>, а админка на
-            <strong>admin.tajvpn.com</strong>. Оплата проходит через ENOT,
-            подписка включается автоматически.
-          </p>
-          <div class="hero__actions">
-            <a class="button button--primary" href="https://api.tajvpn.com/docs">
-              Открыть API docs
-            </a>
-            <a class="button button--ghost" href="https://admin.tajvpn.com">
-              Перейти в админку
-            </a>
-          </div>
-        </div>
-        <aside class="hero__panel">
-          <div class="signal signal--live">Live stack</div>
-          <ul class="stack-list">
-            <li><span>Публичный сайт</span><strong>tajvpn.com</strong></li>
-            <li><span>Backend API</span><strong>api.tajvpn.com</strong></li>
-            <li><span>Admin panel</span><strong>admin.tajvpn.com</strong></li>
-            <li><span>Платежи</span><strong>ENOT</strong></li>
-          </ul>
-        </aside>
+      <header class="topbar">
+        <a class="brand" href="/">
+          <span class="brand__mark">T</span>
+          <span class="brand__name">TAJ VPN</span>
+        </a>
+        <nav class="topbar__nav">
+          <a href="#plans">Тарифы</a>
+          <a href="#stack">Как работает</a>
+          <a href="https://api.tajvpn.com/docs">API docs</a>
+        </nav>
       </header>
 
-      <main class="content">
-        <section class="panel panel--highlight">
-          <div class="panel__heading">
-            <p class="eyebrow">Тарифы</p>
-            <h2>Данные подтягиваются с API</h2>
+      <main>
+        <section class="hero">
+          <div class="hero__copy">
+            <p class="eyebrow">Fast secure access</p>
+            <h1>Красивый VPN-сервис, который уже готов к запуску на домене.</h1>
+            <p class="hero__lead">
+              <strong>tajvpn.com</strong> показывает продукт, <strong>api.tajvpn.com</strong>
+              обслуживает приложение, а <strong>admin.tajvpn.com</strong> помогает
+              управлять платежами и устройствами. Оплата проходит через ENOT, а подписка
+              активируется автоматически.
+            </p>
+            <div class="hero__actions">
+              <a class="button button--primary" href="#plans">Смотреть тарифы</a>
+              <a class="button button--secondary" href="https://api.tajvpn.com/docs">
+                Открыть API
+              </a>
+            </div>
+            <div class="hero__stats">
+              <article class="stat-card">
+                <span class="stat-card__label">Платежи</span>
+                <strong>ENOT</strong>
+              </article>
+              <article class="stat-card">
+                <span class="stat-card__label">Домены</span>
+                <strong>3 активных</strong>
+              </article>
+              <article class="stat-card">
+                <span class="stat-card__label">Запуск</span>
+                <strong>Сразу через Docker</strong>
+              </article>
+            </div>
+          </div>
+
+          <aside class="hero__visual">
+            <div class="phone-card">
+              <div class="phone-card__top">
+                <div class="menu-dots" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+                <div class="premium-pill">
+                  <span class="premium-pill__icon">★</span>
+                  <span>Premium</span>
+                </div>
+              </div>
+              <div class="phone-card__body">
+                <p class="phone-card__caption">Connecting Time</p>
+                <h2>00:45:29</h2>
+                <div class="speed-row">
+                  <div>
+                    <span>Download</span>
+                    <strong>147.67 Mbp/s</strong>
+                  </div>
+                  <div class="speed-row__divider"></div>
+                  <div>
+                    <span>Upload</span>
+                    <strong>348.3 Mbp/s</strong>
+                  </div>
+                </div>
+                <div class="location-chip">
+                  <span class="location-chip__flag">🇬🇧</span>
+                  <div>
+                    <strong>United Kingdom</strong>
+                    <span>212.369.56.87</span>
+                  </div>
+                </div>
+                <div class="power-zone">
+                  <div class="power-zone__ring power-zone__ring--outer"></div>
+                  <div class="power-zone__ring power-zone__ring--mid"></div>
+                  <div class="power-zone__glow"></div>
+                  <div class="power-button">⏻</div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <section id="stack" class="stack-grid">
+          <article class="info-panel">
+            <p class="eyebrow">Сайт</p>
+            <h3>tajvpn.com</h3>
+            <p>Публичная витрина продукта с тарифами, ссылками и callback-страницами оплаты.</p>
+          </article>
+          <article class="info-panel">
+            <p class="eyebrow">Backend</p>
+            <h3>api.tajvpn.com</h3>
+            <p>FastAPI отдаёт тарифы, принимает webhook ENOT и считает подписки по устройствам.</p>
+          </article>
+          <article class="info-panel">
+            <p class="eyebrow">Админка</p>
+            <h3>admin.tajvpn.com</h3>
+            <p>Управление устройствами, статусами оплаты и блокировкой доступа через ADMIN_TOKEN.</p>
+          </article>
+        </section>
+
+        <section id="plans" class="plans-section">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Live plans</p>
+              <h2>Тарифы загружаются напрямую с API</h2>
+            </div>
+            <p class="section-head__note">
+              Если backend уже поднят, карточки ниже автоматически подтянутся с
+              <code>api.tajvpn.com/plans</code>.
+            </p>
           </div>
           <div id="plans-grid" class="plans-grid" aria-live="polite">
             <article class="plan-card plan-card--loading">
@@ -55,44 +143,31 @@
           </div>
         </section>
 
-        <section class="details-grid">
-          <article class="panel">
-            <p class="eyebrow">Как это работает</p>
-            <h3>Автоматический платежный поток</h3>
+        <section class="workflow">
+          <article class="workflow-card">
+            <p class="eyebrow">Автоматизация</p>
+            <h3>Никакой ручной проверки чеков</h3>
             <p>
-              Мобильное приложение создаёт заказ, открывает страницу оплаты ENOT
-              и затем опрашивает статус. После подтверждения платежа доступ к VPN
-              активируется без ручной модерации чеков.
+              Приложение создаёт заказ, переводит пользователя на оплату ENOT и затем
+              обновляет статус через polling и webhook.
             </p>
           </article>
-
-          <article class="panel">
-            <p class="eyebrow">Страницы callback</p>
-            <h3>Готово для success / fail</h3>
+          <article class="workflow-card">
+            <p class="eyebrow">Callback pages</p>
+            <h3>Уже готовы для ENOT</h3>
             <p>
-              Сайт уже содержит страницы для
-              <code>/payment/success</code> и <code>/payment/fail</code>, чтобы
-              их можно было сразу указать в настройках ENOT.
+              На домене уже есть страницы для <code>/payment/success</code> и
+              <code>/payment/fail</code>, которые можно использовать как success и fail URL.
             </p>
             <div class="inline-links">
               <a href="/payment/success">Success page</a>
               <a href="/payment/fail">Fail page</a>
             </div>
           </article>
-
-          <article class="panel">
-            <p class="eyebrow">Backend health</p>
-            <h3>Минимум ручной рутины</h3>
-            <p>
-              Backend отдаёт тарифы, создаёт инвойсы, принимает webhook ENOT,
-              считает подписку и отдаёт admin API с токеном в заголовке
-              <code>X-Admin-Token</code>.
-            </p>
-          </article>
         </section>
       </main>
     </div>
 
-    <script src="/assets/site.js"></script>
+    <script src="/site.js"></script>
   </body>
 </html>

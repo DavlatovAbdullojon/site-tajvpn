@@ -20,8 +20,8 @@ async function loadPlans() {
   } catch (error) {
     plansGrid.innerHTML = `
       <article class="plan-card">
-        <h3>Тарифы недоступны</h3>
-        <p>Не удалось получить список тарифов с api.tajvpn.com. Проверь backend и CORS.</p>
+        <h3>Тарифы пока недоступны</h3>
+        <p>Не удалось получить список тарифов с api.tajvpn.com. Проверь backend, CORS и запуск контейнеров.</p>
       </article>
     `;
     console.error(error);
@@ -33,7 +33,7 @@ function renderPlans(plans) {
     plansGrid.innerHTML = `
       <article class="plan-card">
         <h3>Нет активных тарифов</h3>
-        <p>Добавь или активируй тарифы в backend seed-данных.</p>
+        <p>Добавь или активируй тарифы в backend seed-данных, и они появятся здесь автоматически.</p>
       </article>
     `;
     return;
