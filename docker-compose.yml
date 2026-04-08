@@ -1,0 +1,33 @@
+services:
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: sqlite:////data/vpn_backend.db
+    volumes:
+      - api_data:/data
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      ACME_EMAIL: admin@tajvpn.com
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites/public:/srv/public:ro
+      - ./sites/admin:/srv/admin:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  api_data:
+  caddy_data:
+  caddy_config:

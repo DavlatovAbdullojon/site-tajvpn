@@ -1,0 +1,31 @@
+{
+  email {$ACME_EMAIL}
+}
+
+tajvpn.com {
+  encode zstd gzip
+  root * /srv/public
+
+  handle /payment/success {
+    rewrite * /payment/success/index.html
+    file_server
+  }
+
+  handle /payment/fail {
+    rewrite * /payment/fail/index.html
+    file_server
+  }
+
+  file_server
+}
+
+admin.tajvpn.com {
+  encode zstd gzip
+  root * /srv/admin
+  file_server
+}
+
+api.tajvpn.com {
+  encode zstd gzip
+  reverse_proxy api:8000
+}

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TAJ VPN Admin</title>
+    <meta
+      name="description"
+      content="Админ-панель TAJ VPN для просмотра платежей, устройств и блокировки доступа."
+    />
+    <link rel="stylesheet" href="/assets/admin.css" />
+  </head>
+  <body>
+    <div class="admin-shell">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">TAJ VPN Admin</p>
+          <h1>Контроль платежей и устройств</h1>
+        </div>
+        <button id="refresh-button" class="action action--ghost" type="button">
+          Обновить
+        </button>
+      </header>
+
+      <section class="login-card">
+        <label for="token-input">ADMIN_TOKEN</label>
+        <div class="login-row">
+          <input
+            id="token-input"
+            type="password"
+            placeholder="Введите токен из backend/.env"
+            autocomplete="off"
+          />
+          <button id="save-token-button" class="action action--primary" type="button">
+            Войти
+          </button>
+        </div>
+        <p id="login-status" class="status-text">
+          Токен хранится только в браузере этого устройства.
+        </p>
+      </section>
+
+      <main class="dashboard">
+        <section class="stats-grid" id="stats-grid">
+          <article class="stat-card"><span>Устройства</span><strong>...</strong></article>
+          <article class="stat-card"><span>Активные</span><strong>...</strong></article>
+          <article class="stat-card"><span>Pending</span><strong>...</strong></article>
+          <article class="stat-card"><span>Выручка</span><strong>...</strong></article>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head">
+            <h2>Платежи</h2>
+            <span class="hint">Список строится из <code>/admin/payments</code></span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Payment ID</th>
+                  <th>Устройство</th>
+                  <th>Тариф</th>
+                  <th>Сумма</th>
+                  <th>Статус</th>
+                  <th>Создан</th>
+                </tr>
+              </thead>
+              <tbody id="payments-body">
+                <tr><td colspan="6">Ожидаем токен и загрузку данных...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head">
+            <h2>Устройства</h2>
+            <span class="hint">Ban / unban работает через admin API</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Device ID</th>
+                  <th>Платформа</th>
+                  <th>Статус</th>
+                  <th>Тариф</th>
+                  <th>Истекает</th>
+                  <th>Действие</th>
+                </tr>
+              </thead>
+              <tbody id="devices-body">
+                <tr><td colspan="6">Ожидаем токен и загрузку данных...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/assets/admin.js"></script>
+  </body>
+</html>
